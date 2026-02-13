@@ -86,14 +86,39 @@ while current_time < start_time+30.0:
     print("---------------------------------------")
 
 
-
 file = open('test.csv', 'w', newline='')
-
 csvwriter = csv.writer(file, delimiter=',')
 
-for i in range(10):
-    now = time.time()
-    value = pm25.read()
-    csvwriter.writerow([now, value])
+# Metadata line (requirement c)
+file.write("# PM25 sensor log from Raspberry Pi")
+
+# Header row (VERY IMPORTANT)
+csvwriter.writerow([
+    "timestamp",
+    "pm1_standard",
+    "pm25_standard",
+    "pm10_standard"
+])
+
+start_time = time.time()
+
+while time.time() - start_time < 30:   # run for 30 seconds
+
+    try:
+        aqdata = pm25.read()
+    except RuntimeError:
+        print("Read error, skipping sample")
+        continue
+
+    timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
+
+    csvwriter.writerow([
+        timestamp,
+        aqdata["pm10 standard"],
+        aqdata["pm25 standard"],
+        aqdata["pm100 standard"]
+    ])
+
+    time.sleep(1)
 
 file.close()
