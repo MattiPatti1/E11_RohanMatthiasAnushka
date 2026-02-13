@@ -86,15 +86,14 @@ while current_time < start_time+30.0:
     print("---------------------------------------")
 
 
-with open('test.csv', 'w', newline='') as file:
 
-    csvwriter = csv.writer(file, delimiter=',')
+file = open('test.csv', 'w', newline='')
 
-    meta = ['time', 'data']
-    csvwriter.writerow(meta)
+csvwriter = csv.writer(file, delimiter=',')
 
-    for i in range(10):
-        now = time.time()                 
-        value = np.random.random()
+for i in range(10):
+    now = time.time()
+    value = pm25.read()
+    csvwriter.writerow([now, value])
 
-        csvwriter.writerow([now, value])
+file.close()
