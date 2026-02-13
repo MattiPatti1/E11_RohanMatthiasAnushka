@@ -45,9 +45,12 @@ pm25 = PM25_UART(uart, reset_pin)
 # Connect to a PM2.5 sensor over I2C
 #pm25 = PM25_I2C(i2c, reset_pin)
 
-print("Found PM2.5 sensor, reading data...")
+print("Found PM2.5 sensor, reading data about the concentration of different sized particles.")
 
-while True:
+start_time = time.time()
+current_time = start_time
+
+while current_time < start_time+30.0:
     time.sleep(1)
 
     try:
@@ -55,7 +58,7 @@ while True:
         # print(aqdata)
     except RuntimeError:
         print("Unable to read from sensor, retrying...")
-        continue
+    current_time = time.time()
 
     print()
     print("Concentration Units (standard)")
