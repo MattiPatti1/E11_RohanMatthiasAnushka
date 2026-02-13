@@ -86,19 +86,15 @@ while current_time < start_time+30.0:
     print("---------------------------------------")
 
 
-file = open('Data1.csv', 'w', newline = None) 
+with open('test.csv', 'w', newline='') as file:
 
-csvwriter = csv.writer(file, delimiter=',')
+    csvwriter = csv.writer(file, delimiter=',')
 
-meta = ['time', aqdata['particles 03um'],aqdata['particles 05um'],aqdata['particles 10um'], aqdata['particles 25um'], aqdata['particles 50um'], aqdata['particles 100um']]
+    meta = ['time', 'data']
+    csvwriter.writerow(meta)
 
-csvwriter.writerow(meta) 
+    for i in range(10):
+        now = time.time()                 
+        value = np.random.random()
 
-for i in range(10):
-    now = time.time()
-    value = np.random.random()
-    csvwriter.writerow([now,value])
-
-file.close() 
-
-print(meta) 
+        csvwriter.writerow([now, value])
