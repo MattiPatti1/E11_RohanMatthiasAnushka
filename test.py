@@ -13,6 +13,6 @@ csvwriter.writerow(meta)
 for i in range(10):
     now = time.time()
     value = np.random.random()
-    csvwriter.writenow([now,value])
+    csvwriter.writerow([now,value])
 
 file.close() 
