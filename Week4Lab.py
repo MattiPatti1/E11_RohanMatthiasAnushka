@@ -26,7 +26,7 @@ reset_pin = None
 
 # For use with microcontroller board:
 # (Connect the sensor TX pin to the board/computer RX pin)
-uart = busio.UART(board.TX, board.RX, baudrate=9600)
+# uart = busio.UART(board.TX, board.RX, baudrate=9600)
 
 # For use with Raspberry Pi/Linux:
 import serial
