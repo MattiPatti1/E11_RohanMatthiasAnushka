@@ -90,7 +90,7 @@ file = open('Data1.csv', 'w', newline = None)
 
 csvwriter = csv.writer(file, delimiter=',')
 
-meta = ['time','particles 03um','particles 05um','particles 10um', 'particles 25um', 'particles 50um', 'particles 100um']
+meta = ['time', aqdata['particles 03um'],aqdata['particles 05um'],aqdata['particles 10um'], aqdata['particles 25um'], aqdata['particles 50um'], aqdata['particles 100um']]
 
 csvwriter.writerow(meta) 
 
