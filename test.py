@@ -4,7 +4,7 @@ import numpy as np
 
 file = open('test.csv', 'w', newline = none) 
 
-csvwriter = csv.writer(file, delimeter=','
+csvwriter = csv.writer(file, delimiter=',')
 
 meta = ['time','data']
 
