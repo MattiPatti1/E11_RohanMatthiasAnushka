@@ -89,10 +89,9 @@ while current_time < start_time+30.0:
 file = open('test.csv', 'w', newline='')
 csvwriter = csv.writer(file, delimiter=',')
 
-# Metadata line (requirement c)
+
 file.write("# PM25 sensor log from Raspberry Pi")
 
-# Header row (VERY IMPORTANT)
 csvwriter.writerow([
     "timestamp",
     "pm1_standard",
