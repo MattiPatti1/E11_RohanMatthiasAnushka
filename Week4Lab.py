@@ -51,6 +51,7 @@ start_time = time.time()
 current_time = start_time
 
 while current_time < start_time+30.0:
+    t = "Time = " + str(time.asctime())
     time.sleep(1)
 
     try:
@@ -61,6 +62,7 @@ while current_time < start_time+30.0:
     current_time = time.time()
 
     print()
+    print(t) 
     print("Concentration Units (standard)")
     print("---------------------------------------")
     print(
@@ -81,3 +83,4 @@ while current_time < start_time+30.0:
     print("Particles > 5.0um / 0.1L air:", aqdata["particles 50um"])
     print("Particles > 10 um / 0.1L air:", aqdata["particles 100um"])
     print("---------------------------------------")
+    
