@@ -6,7 +6,8 @@ Example sketch to connect to PM2.5 sensor with either I2C or UART.
 """
 
 import time
-
+import csv 
+import numpy as np 
 import board
 import busio
 from digitalio import DigitalInOut, Direction, Pull
@@ -83,4 +84,21 @@ while current_time < start_time+30.0:
     print("Particles > 5.0um / 0.1L air:", aqdata["particles 50um"])
     print("Particles > 10 um / 0.1L air:", aqdata["particles 100um"])
     print("---------------------------------------")
-    
+
+
+file = open('Data1.csv', 'w', newline = None) 
+
+csvwriter = csv.writer(file, delimiter=',')
+
+meta = ['time','particles 03um','particles 05um','particles 10um', 'particles 25um', 'particles 50um', 'particles 100um']
+
+csvwriter.writerow(meta) 
+
+for i in range(10):
+    now = time.time()
+    value = np.random.random()
+    csvwriter.writerow([now,value])
+
+file.close() 
+
+print(meta) 
