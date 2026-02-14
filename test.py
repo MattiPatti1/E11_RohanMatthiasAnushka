@@ -1,18 +1,14 @@
-import csv 
-import time 
-import numpy as np 
+import pandas as pd
+import matplotlib.pyplot as plt
 
-file = open('test.csv', 'w', newline = None) 
+data = pd.read_csv('test.csv', comment='#')
 
-csvwriter = csv.writer(file, delimiter=',')
+plt.figure(figsize=(10, 6))
+plt.hist(data['pm25_standard'], bins=15)
 
-meta = ['time','data']
+plt.title('Distribution of Concentrations')
+plt.xlabel('PM2.5 Concentration')
+plt.ylabel('Frequency')
+plt.grid(axis='y', alpha=0.75)
 
-csvwriter.writerow(meta) 
-
-for i in range(10):
-    now = time.time()
-    value = np.random.random()
-    csvwriter.writerow([now,value])
-
-file.close() 
+plt.show()
