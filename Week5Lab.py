@@ -5,6 +5,7 @@ import sys
 import numpy as np 
 import board
 import busio
+import adafruit_bme680
 
 from digitalio import DigitalInOut, Direction, Pull
 from adafruit_pm25.i2c import PM25_I2C
@@ -14,13 +15,20 @@ uart = serial.Serial("/dev/ttyS0", baudrate=9600, timeout=0.25)
 from adafruit_pm25.uart import PM25_UART
 pm25 = PM25_UART(uart, reset_pin)
 
+# Create sensor object, communicating over the board's default I2C bus
+i2c = board.I2C()   # uses board.SCL and board.SDA
+bme680 = adafruit_bme680.Adafruit_BME680_I2C(i2c)
+
+# change this to match the location's pressure (hPa) at sea level
+bme680.sea_level_pressure = 1013.25
+
 print("Found PM2.5 sensor, reading data about the concentration of different sized particles.")
 
 arguments = sys.argv
 print(arguments)
 
-data_path = 'data/' + arguments[1]
-runtime = int(arguments[2])
+data_path = arguments[0]
+runtime = int(arguments[1])
 
 file = open(data_path,'w', newline = None)
 
@@ -36,6 +44,13 @@ current_time = start_time
 while current_time < start_time+runtime:
     t = "Time = " + str(time.asctime())
     time.sleep(1)
+    T = "\nTemperature: %0.1f C" % bme680.temperature
+    G = "Gas: %d ohm" % bme680.gas
+    H = "Humidity: %0.1f %%" % bme680.relative_humidity
+    P = "Pressure: %0.3f hPa" % bme680.pressure
+    A = "Altitude = %0.2f meters" % bme680.altitude
+    print(t,T,G,H,P,A)
+    current_time = time.time()
 
     try:
         aqdata = pm25.read()
@@ -68,7 +83,7 @@ while current_time < start_time+runtime:
     print("---------------------------------------")
 
 
-file = open('test.csv', 'w', newline='')
+file = open('Week5Data.csv', 'w', newline='')
 csvwriter = csv.writer(file, delimiter=',')
 
 
@@ -78,12 +93,17 @@ csvwriter.writerow([
     "timestamp",
     "pm1_standard",
     "pm25_standard",
-    "pm10_standard"
+    "pm10_standard",
+    "Temperature",
+    "Gas",
+    "Humidity",
+    "Pressure",
+    "Altitude",
 ])
 
 start_time = time.time()
 
-while time.time() - start_time < 30:   # run for 30 seconds
+while time.time() - start_time < runtime:   # run for 30 seconds
 
     try:
         aqdata = pm25.read()
@@ -97,9 +117,17 @@ while time.time() - start_time < 30:   # run for 30 seconds
         timestamp,
         aqdata["pm10 standard"],
         aqdata["pm25 standard"],
-        aqdata["pm100 standard"]
+        aqdata["pm100 standard"],
+        T,
+        G,
+        H,
+        P,
+        A,
     ])
-
+    
     time.sleep(1)
 
-file.close()
+
+
+
+
