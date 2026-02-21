@@ -27,8 +27,8 @@ print("Found PM2.5 sensor, reading data about the concentration of different siz
 arguments = sys.argv
 print(arguments)
 
-data_path = arguments[0]
-runtime = int(arguments[1])
+data_path = arguments[1]
+runtime = int(arguments[2])
 
 file = open(data_path,'w', newline = None)
 
@@ -40,6 +40,21 @@ csvwriter.writerow(meta)
 
 start_time = time.time()
 current_time = start_time
+
+file = open('Week5Data.csv', 'w', newline='')
+csvwriter = csv.writer(file, delimiter=',')
+
+csvwriter.writerow([
+    "timestamp",
+    "pm1_standard",
+    "pm25_standard",
+    "pm10_standard",
+    "Temperature",
+    "Gas",
+    "Humidity",
+    "Pressure",
+    "Altitude",
+])
 
 while current_time < start_time+runtime:
     t = "Time = " + str(time.asctime())
@@ -55,8 +70,9 @@ while current_time < start_time+runtime:
     try:
         aqdata = pm25.read()
         # print(aqdata)
-    except RuntimeError:
-        print("Unable to read from sensor, retrying...")
+    except Exception as e:
+        print("Read error, skipping sample")
+        print(e)
     current_time = time.time()
 
     print()
@@ -81,36 +97,7 @@ while current_time < start_time+runtime:
     print("Particles > 5.0um / 0.1L air:", aqdata["particles 50um"])
     print("Particles > 10 um / 0.1L air:", aqdata["particles 100um"])
     print("---------------------------------------")
-
-
-file = open('Week5Data.csv', 'w', newline='')
-csvwriter = csv.writer(file, delimiter=',')
-
-
-file.write("# PM25 sensor log from Raspberry Pi")
-
-csvwriter.writerow([
-    "timestamp",
-    "pm1_standard",
-    "pm25_standard",
-    "pm10_standard",
-    "Temperature",
-    "Gas",
-    "Humidity",
-    "Pressure",
-    "Altitude",
-])
-
-start_time = time.time()
-
-while time.time() - start_time < runtime:   # run for 30 seconds
-
-    try:
-        aqdata = pm25.read()
-    except RuntimeError:
-        print("Read error, skipping sample")
-        continue
-
+    
     timestamp = time.strftime("%Y-%m-%d %H:%M:%S")
 
     csvwriter.writerow([
@@ -118,16 +105,17 @@ while time.time() - start_time < runtime:   # run for 30 seconds
         aqdata["pm10 standard"],
         aqdata["pm25 standard"],
         aqdata["pm100 standard"],
-        T,
-        G,
-        H,
-        P,
-        A,
+        bme680.temperature,
+        bme680.gas,
+        bme680.relative_humidity,
+        bme680.pressure,
+        bme680.altitude,
     ])
     
-    time.sleep(1)
+    
+
+file.close()
 
 
 
-
-
+file.close()
