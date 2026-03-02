@@ -12,7 +12,7 @@ labels = [
 INSIDE_FILE = "data/Week5Data_Inside.csv"
 OUTSIDE_FILE = "data/Week5Data_Outside.csv"
 
-OUTDOOR_OFFSET_SECONDS = 30 
+OUTDOOR_OFFSET_SECONDS = 30 # Walking from lab to outside took approx 30s
 
 ### 1.1 
 
@@ -49,9 +49,9 @@ for label in labels:
     combined_unc = np.sqrt(unc_in**2 + unc_out**2)
     sigma_sep = abs(mean_in - mean_out) / combined_unc
 
-    print(f"\n--- {label} ---")
-    print(f"Inside:  {mean_in:.2f} ± {unc_in:.2f}  (std = {std_in:.2f})")
-    print(f"Outside: {mean_out:.2f} ± {unc_out:.2f}  (std = {std_out:.2f})")
+    print(f"{label} ")
+    print(f"Inside:  {mean_in:.2f} +/- {unc_in:.2f}  (std = {std_in:.2f})")
+    print(f"Outside: {mean_out:.2f} +/- {unc_out:.2f}  (std = {std_out:.2f})")
     print(f"Separation: {sigma_sep:.2f} sigma")
 
 
@@ -109,9 +109,9 @@ for label in labels:
     combined_unc = np.sqrt(unc_out**2 + unc_vent**2)
     sigma_sep = abs(mean_out - mean_vent) / combined_unc
 
-    print(f"\n--- {label} ---")
-    print(f"Normal Outside: {mean_out:.2f} ± {unc_out:.2f}  (std = {std_out:.2f})")
-    print(f"Vent Location:  {mean_vent:.2f} ± {unc_vent:.2f}  (std = {std_vent:.2f})")
+    print(f"{label}")
+    print(f"Normal Outside: {mean_out:.2f} +/- {unc_out:.2f}  (std = {std_out:.2f})")
+    print(f"Vent Location:  {mean_vent:.2f} +/- {unc_vent:.2f}  (std = {std_vent:.2f})")
     print(f"Separation: {sigma_sep:.2f} sigma")
 
 
