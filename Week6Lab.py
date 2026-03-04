@@ -12,9 +12,9 @@ labels = [
 INSIDE_FILE = "data/Week5Data_Inside.csv"
 OUTSIDE_FILE = "data/Week5Data_Outside.csv"
 
-OUTDOOR_OFFSET_SECONDS = 30 # Walking from lab to outside took approx 30s
+OUTDOOR_OFFSET_SECONDS = 30 # Walking from the lab to outside took approx 30s
 
-### 1.1 
+### 1.1 Comparing inside and Outside Data
 
 inside_df = pd.read_csv(INSIDE_FILE)
 outside_df = pd.read_csv(OUTSIDE_FILE)
@@ -74,13 +74,13 @@ for label in labels:
     plt.tight_layout()
     plt.show()
 
-    print("The data most deviates from Gaussian Distributions. Some of the particulate matter data exhibit some normal behacior with a central peak ans somehwat symmetric tails. However most of the PM data is heavy skewed, reflecting clean ari conditions as those values rarley rose above noise. AS the dataset conatins significantly more than 30 data points we can use the Central Limit Theroem. ")
+    print("For the most part, the data deviates from Gaussian Distributions. Some of the particulate matter data exhibit normal behavior with a central peak and somewhat symmetric tails. However most of the PM data is heavy skewed, reflecting clean air conditions as those values rarley rose above noise. Some data, like prussure remained nearly constant through the entire time span. As the dataset conatins significantly more than 30 data points we can use the Central Limit Theroem. ")
 
 
 #%% Step 2
 
 
-#%% Step 3
+#%% Step 3 Comparing to a third location near a vent
 VENT_FILE = "data/Week6Data_Vent.csv"
 
 ### 3.1 
@@ -90,7 +90,6 @@ vent_data = vent_df.iloc[1:].reset_index(drop=True)
 min_length = min(len(outside_data), len(vent_data))
 outside_data = outside_data.iloc[:min_length]
 vent_data = vent_data.iloc[:min_length]
-
 
 for label in labels:
     
