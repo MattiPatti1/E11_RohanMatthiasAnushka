@@ -1,5 +1,5 @@
 import sys
-sys.path.append('/home/pi/cape_mca') # capemca.py directory
+sys.path.append('/home/pi/E11_RohanMatthiasAnushka/cape_mca') # capemca.py directory
 from capemca import *
 import time
 import numpy as np
@@ -33,6 +33,7 @@ with CapeMCA() as mca:
             read_start = time.time()
             status = mca.read_status()
             spectrum = mca.read_spectrum()
+            csvwriter.writerow([time.time(), status.total_count])
             read_end = time.time()
             # Schedule next read from when this one started
             next_read = read_start + window
@@ -85,7 +86,3 @@ if spectra:
     plt.savefig("spectra.png", dpi=150)
     print("Plot saved to spectra.png")
     plt.show()
-file.close()
-print(f"Data saved to {output_file_path}. Device closed, exiting.")
-
-# (Your plotting code below remains the same...)
