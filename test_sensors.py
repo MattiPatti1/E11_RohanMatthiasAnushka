@@ -38,7 +38,7 @@ print("\n--- PM2.5 (dust) ---")
 try:
     import serial
     from adafruit_pm25.uart import PM25_UART
-    uart = serial.Serial("/dev/ttyAMA0", baudrate=9600, timeout=0.25)
+    uart = serial.Serial("/dev/ttyS0", baudrate=9600, timeout=0.25)
     pm = PM25_UART(uart, reset_pin=None)
     r = pm.read()
     print(f"OK  PM1: {r['pm10 standard']}  PM2.5: {r['pm25 standard']}  PM10: {r['pm100 standard']}  ug/m3")
