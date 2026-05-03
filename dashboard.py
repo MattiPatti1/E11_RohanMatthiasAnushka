@@ -58,7 +58,7 @@ SCREEN_W   = 0   # set at runtime from actual display
 SCREEN_H   = 0
 FPS        = 10
 HISTORY    = 120        # data points kept per channel (≈ 120 s at 1 Hz)
-PM_PORT    = "/dev/ttyS0"
+PM_PORT    = "/dev/ttyAMA0"
 SEA_LEVEL  = 1013.25    # hPa, for BME680 altitude
 
 # ── Colours  (amber CRT / 70s terminal) ───────────────────────────────────
