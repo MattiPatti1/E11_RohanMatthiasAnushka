@@ -1,0 +1,469 @@
+import sys
+import threading
+import time
+import math
+import collections
+
+import pygame
+
+
+
+try:
+    import board
+    import adafruit_bme680
+    _BME680 = True
+except ImportError:
+    _BME680 = False
+
+try:
+    import serial
+    from adafruit_pm25.uart import PM25_UART
+    _PM25 = True
+except ImportError:
+    _PM25 = False
+
+try:
+    import adafruit_scd4x
+    _SCD4X = True
+except ImportError:
+    _SCD4X = False
+
+try:
+    import adafruit_mlx90393
+    _MLX = True
+except ImportError:
+    _MLX = False
+
+try:
+    from capemca import CapeMCA, find_all_mcas, SPECTRUM_CHANNELS
+    _MCA = True
+except ImportError:
+    _MCA = False
+
+# ── Configuration ──────────────────────────────────────────────────────────
+
+SCREEN_W   = 1280
+SCREEN_H   = 720
+FPS        = 10
+HISTORY    = 120        # data points kept per channel (≈ 120 s at 1 Hz)
+PM_PORT    = "/dev/ttyS0"
+SEA_LEVEL  = 1013.25    # hPa, for BME680 altitude
+
+# ── Colours ────────────────────────────────────────────────────────────────
+
+BG      = ( 12,  14,  22)
+PANEL   = ( 22,  26,  42)
+BORDER  = ( 48,  54,  80)
+WHITE   = (228, 232, 255)
+DIM     = ( 90, 100, 130)
+GREEN   = ( 72, 210,  90)
+YELLOW  = (255, 205,  55)
+ORANGE  = (255, 135,  35)
+RED     = (215,  55,  55)
+CYAN    = ( 55, 195, 228)
+BLUE    = ( 55, 115, 238)
+MAGENTA = (195,  75, 200)
+
+# ── Shared state (all sensor threads write here) ───────────────────────────
+
+_lock = threading.Lock()
+
+_data = {
+    "bme": dict(temperature=None, humidity=None, pressure=None,
+                gas=None, altitude=None, ok=False, err=""),
+    "pm":  dict(pm1=None, pm25=None, pm10=None, ok=False, err=""),
+    "co2": dict(co2=None, temperature=None, humidity=None, ok=False, err=""),
+    "mag": dict(x=None, y=None, z=None, magnitude=None, ok=False, err=""),
+    "mca": dict(cps=None, temperature=None, total=None, ok=False, err=""),
+}
+
+_hist = {
+    "bme_temp":  collections.deque(maxlen=HISTORY),
+    "bme_humid": collections.deque(maxlen=HISTORY),
+    "co2":       collections.deque(maxlen=HISTORY),
+    "pm25":      collections.deque(maxlen=HISTORY),
+    "mag":       collections.deque(maxlen=HISTORY),
+    "mca_cps":   collections.deque(maxlen=HISTORY),
+}
+
+# ── Sensor threads ─────────────────────────────────────────────────────────
+
+def _thread_bme680():
+    if not _BME680:
+        with _lock:
+            _data["bme"]["err"] = "adafruit_bme680 not installed"
+        return
+    try:
+        i2c  = board.I2C()
+        bme  = adafruit_bme680.Adafruit_BME680_I2C(i2c)
+        bme.sea_level_pressure = SEA_LEVEL
+        while True:
+            try:
+                t = round(bme.temperature, 1)
+                h = round(bme.relative_humidity, 1)
+                p = round(bme.pressure, 1)
+                g = bme.gas
+                a = round(bme.altitude, 1)
+                with _lock:
+                    _data["bme"].update(temperature=t, humidity=h, pressure=p,
+                                        gas=g, altitude=a, ok=True, err="")
+                    _hist["bme_temp"].append(t)
+                    _hist["bme_humid"].append(h)
+            except Exception as e:
+                with _lock:
+                    _data["bme"].update(ok=False, err=str(e)[:40])
+            time.sleep(2)
+    except Exception as e:
+        with _lock:
+            _data["bme"].update(ok=False, err=f"init: {e}"[:40])
+
+
+def _thread_pm25():
+    if not _PM25:
+        with _lock:
+            _data["pm"]["err"] = "adafruit_pm25 not installed"
+        return
+    try:
+        uart = serial.Serial(PM_PORT, baudrate=9600, timeout=0.25)
+        pm   = PM25_UART(uart, reset_pin=None)
+        while True:
+            try:
+                r = pm.read()
+                p1  = r["pm10 standard"]
+                p25 = r["pm25 standard"]
+                p10 = r["pm100 standard"]
+                with _lock:
+                    _data["pm"].update(pm1=p1, pm25=p25, pm10=p10,
+                                       ok=True, err="")
+                    _hist["pm25"].append(p25)
+            except Exception as e:
+                with _lock:
+                    _data["pm"].update(ok=False, err=str(e)[:40])
+            time.sleep(1)
+    except Exception as e:
+        with _lock:
+            _data["pm"].update(ok=False, err=f"init: {e}"[:40])
+
+
+def _thread_scd4x():
+    if not _SCD4X:
+        with _lock:
+            _data["co2"]["err"] = "adafruit_scd4x not installed"
+        return
+    try:
+        i2c = board.I2C()
+        scd = adafruit_scd4x.SCD4X(i2c)
+        scd.start_periodic_measurement()
+        while True:
+            try:
+                if scd.data_ready:
+                    co2 = scd.CO2
+                    t   = round(scd.temperature, 1)
+                    h   = round(scd.relative_humidity, 1)
+                    with _lock:
+                        _data["co2"].update(co2=co2, temperature=t,
+                                            humidity=h, ok=True, err="")
+                        _hist["co2"].append(co2)
+            except Exception as e:
+                with _lock:
+                    _data["co2"].update(ok=False, err=str(e)[:40])
+            time.sleep(5)
+    except Exception as e:
+        with _lock:
+            _data["co2"].update(ok=False, err=f"init: {e}"[:40])
+
+
+def _thread_mlx90393():
+    if not _MLX:
+        with _lock:
+            _data["mag"]["err"] = "adafruit_mlx90393 not installed"
+        return
+    try:
+        i2c = board.I2C()
+        mlx = adafruit_mlx90393.MLX90393(i2c, gain=adafruit_mlx90393.GAIN_1X)
+        while True:
+            try:
+                mx, my, mz = mlx.magnetic
+                mag = math.sqrt(mx * mx + my * my + mz * mz)
+                with _lock:
+                    _data["mag"].update(x=round(mx, 1), y=round(my, 1),
+                                        z=round(mz, 1), magnitude=round(mag, 1),
+                                        ok=True, err="")
+                    _hist["mag"].append(mag)
+            except Exception as e:
+                with _lock:
+                    _data["mag"].update(ok=False, err=str(e)[:40])
+            time.sleep(0.5)
+    except Exception as e:
+        with _lock:
+            _data["mag"].update(ok=False, err=f"init: {e}"[:40])
+
+
+def _thread_mca():
+    if not _MCA:
+        with _lock:
+            _data["mca"]["err"] = "capemca not found"
+        return
+    if not find_all_mcas():
+        with _lock:
+            _data["mca"].update(ok=False, err="no MCA device found")
+        return
+    while True:
+        try:
+            with CapeMCA() as mca:
+                status = mca.read_status()
+                cps   = status.cps
+                total = status.total_count
+                with _lock:
+                    _data["mca"].update(cps=round(cps, 1), total=total,
+                                        ok=True, err="")
+                    _hist["mca_cps"].append(cps)
+        except Exception as e:
+            with _lock:
+                _data["mca"].update(ok=False, err=str(e)[:40])
+        time.sleep(5)
+
+# ── Drawing helpers ────────────────────────────────────────────────────────
+
+def _rrect(surf, color, rect, r=10):
+    pygame.draw.rect(surf, color, rect, border_radius=r)
+
+
+def _text(surf, font, text, color, x, y):
+    surf.blit(font.render(text, True, color), (x, y))
+
+
+def _text_c(surf, font, text, color, cx, cy):
+    s = font.render(text, True, color)
+    surf.blit(s, s.get_rect(center=(cx, cy)))
+
+
+def _threshold_color(v, warn, crit):
+    if v is None:
+        return DIM
+    return GREEN if v < warn else (YELLOW if v < crit else RED)
+
+
+def _sparkline(surf, values, rect, color, lo=None, hi=None):
+    """Draw a line chart inside rect from a sequence of float values."""
+    pts = list(values)
+    if len(pts) < 2:
+        return
+    x, y, w, h = rect
+    lo = lo if lo is not None else min(pts)
+    hi = hi if hi is not None else max(pts)
+    if hi <= lo:
+        hi = lo + 1.0
+    span = hi - lo
+
+    coords = [
+        (
+            x + int(i / (len(pts) - 1) * w),
+            y + h - int((v - lo) / span * h),
+        )
+        for i, v in enumerate(pts)
+    ]
+    # Filled area under the line (subtle)
+    poly = [(x, y + h)] + coords + [(x + w, y + h)]
+    fill = tuple(max(0, c - 120) for c in color)
+    pygame.draw.polygon(surf, fill, poly)
+    pygame.draw.lines(surf, color, False, coords, 2)
+    pygame.draw.circle(surf, color, coords[-1], 4)
+
+
+# ── Layout drawing ─────────────────────────────────────────────────────────
+
+def _draw_sensor_card(surf, fonts, title, fields, rect, ok, err):
+    """
+    fields: list of (label, value_string, color)
+    """
+    x, y, w, h = rect
+    _rrect(surf, PANEL, rect, 10)
+    pygame.draw.rect(surf, BORDER if ok else RED, rect, 2, border_radius=10)
+
+    title_col = CYAN if ok else RED
+    _text(surf, fonts["sm"], title, title_col, x + 10, y + 7)
+
+    if not ok:
+        _text(surf, fonts["xs"], err[:34], RED, x + 8, y + 30)
+        return
+
+    row_h = (h - 38) // max(len(fields), 1)
+    for i, (label, val, col) in enumerate(fields):
+        ry = y + 36 + i * row_h
+        _text(surf, fonts["xs"], label, DIM,  x + 10, ry)
+        _text(surf, fonts["md"], val,   col,  x + 10, ry + 14)
+
+
+def _draw_chart(surf, fonts, title, values, unit, rect, color,
+                lo=None, hi=None, warn=None, crit=None):
+    x, y, w, h = rect
+    _rrect(surf, PANEL, rect, 8)
+    pygame.draw.rect(surf, BORDER, rect, 1, border_radius=8)
+    _text(surf, fonts["xs"], title, DIM, x + 8, y + 5)
+
+    pts = list(values)
+    if pts:
+        latest = pts[-1]
+        col = _threshold_color(latest, warn, crit) if warn else color
+        label = f"{latest:.1f} {unit}"
+        s = fonts["sm"].render(label, True, col)
+        surf.blit(s, (x + w - s.get_width() - 8, y + 3))
+
+    _sparkline(surf, pts, (x + 4, y + 22, w - 8, h - 28), color, lo, hi)
+
+
+# ── Main render pass ───────────────────────────────────────────────────────
+
+def _render(surf, fonts, d, hist):
+    surf.fill(BG)
+
+    # Title bar
+    ts = time.strftime("%Y-%m-%d  %H:%M:%S")
+    _text_c(surf, fonts["lg"], "INTEGRATED SENSOR DASHBOARD",
+            CYAN, SCREEN_W // 2, 18)
+    _text(surf, fonts["xs"], ts, DIM, SCREEN_W - 170, 8)
+
+    # ── Sensor cards ──────────────────────────────────────────────────────
+    CARD_TOP = 42
+    CARD_H   = 160
+    CARD_W   = (SCREEN_W - 20) // 5
+    GAP      = 4
+
+    bme = d["bme"]
+    _draw_sensor_card(
+        surf, fonts, "BME680  ENV",
+        [
+            ("Temp",     f"{bme['temperature']} °C"  if bme['temperature'] is not None else "---",
+             _threshold_color(bme['temperature'], 30, 40)),
+            ("Humidity", f"{bme['humidity']} %"      if bme['humidity']    is not None else "---", CYAN),
+            ("Pressure", f"{bme['pressure']} hPa"    if bme['pressure']    is not None else "---", WHITE),
+            ("Gas",      f"{bme['gas']} Ω"           if bme['gas']         is not None else "---", DIM),
+        ],
+        (10, CARD_TOP, CARD_W - GAP, CARD_H), bme["ok"], bme["err"],
+    )
+
+    pm = d["pm"]
+    _draw_sensor_card(
+        surf, fonts, "PM2.5  DUST",
+        [
+            ("PM 1.0",  f"{pm['pm1']}  µg/m³"  if pm['pm1']  is not None else "---",
+             _threshold_color(pm['pm1'], 12, 35)),
+            ("PM 2.5",  f"{pm['pm25']} µg/m³"  if pm['pm25'] is not None else "---",
+             _threshold_color(pm['pm25'], 12, 35)),
+            ("PM 10",   f"{pm['pm10']} µg/m³"  if pm['pm10'] is not None else "---",
+             _threshold_color(pm['pm10'], 54, 154)),
+        ],
+        (10 + CARD_W, CARD_TOP, CARD_W - GAP, CARD_H), pm["ok"], pm["err"],
+    )
+
+    co2 = d["co2"]
+    _draw_sensor_card(
+        surf, fonts, "SCD4x  CO₂",
+        [
+            ("CO₂",     f"{co2['co2']} ppm"    if co2['co2']         is not None else "---",
+             _threshold_color(co2['co2'], 1000, 2000)),
+            ("Temp",    f"{co2['temperature']} °C" if co2['temperature'] is not None else "---",
+             _threshold_color(co2['temperature'], 30, 40)),
+            ("Humidity",f"{co2['humidity']} %"  if co2['humidity']    is not None else "---", CYAN),
+        ],
+        (10 + CARD_W * 2, CARD_TOP, CARD_W - GAP, CARD_H), co2["ok"], co2["err"],
+    )
+
+    mag = d["mag"]
+    _draw_sensor_card(
+        surf, fonts, "MLX90393  MAG",
+        [
+            ("X",   f"{mag['x']} µT"         if mag['x']         is not None else "---", BLUE),
+            ("Y",   f"{mag['y']} µT"         if mag['y']         is not None else "---", GREEN),
+            ("Z",   f"{mag['z']} µT"         if mag['z']         is not None else "---", MAGENTA),
+            ("|B|", f"{mag['magnitude']} µT" if mag['magnitude'] is not None else "---", WHITE),
+        ],
+        (10 + CARD_W * 3, CARD_TOP, CARD_W - GAP, CARD_H), mag["ok"], mag["err"],
+    )
+
+    mca = d["mca"]
+    _draw_sensor_card(
+        surf, fonts, "MCA  RADIATION",
+        [
+            ("Count rate", f"{mca['cps']} cps" if mca['cps']   is not None else "---",
+             _threshold_color(mca['cps'], 100, 500)),
+            ("Total",      f"{mca['total']}"   if mca['total'] is not None else "---", DIM),
+        ],
+        (10 + CARD_W * 4, CARD_TOP, CARD_W - GAP, CARD_H), mca["ok"], mca["err"],
+    )
+
+    # ── Sparkline charts ──────────────────────────────────────────────────
+    CHART_TOP = CARD_TOP + CARD_H + 8
+    CHART_H   = (SCREEN_H - CHART_TOP - 10) // 2
+    CHART_W   = (SCREEN_W - 20) // 3
+
+    charts = [
+        # row 0
+        ("Temperature (BME680)",    hist["bme_temp"],  "°C",  GREEN,    0,    50, 30,  40),
+        ("CO₂  (SCD4x)",            hist["co2"],       "ppm", YELLOW,   300, 2500, 1000, 2000),
+        ("Humidity (BME680)",        hist["bme_humid"], "%",   CYAN,     0,   100, 70,   85),
+        # row 1
+        ("PM 2.5  (µg/m³)",         hist["pm25"],      "µg",  ORANGE,   0,    60, 12,   35),
+        ("Magnetic field  |B| (µT)", hist["mag"],       "µT",  BLUE,     None, None, None, None),
+        ("Radiation  (cps)",         hist["mca_cps"],   "cps", RED,      0,    None, 100, 500),
+    ]
+
+    for idx, (title, vals, unit, col, lo, hi, warn, crit) in enumerate(charts):
+        ci = idx % 3
+        ri = idx // 3
+        rx = 10 + ci * CHART_W
+        ry = CHART_TOP + ri * (CHART_H + 4)
+        _draw_chart(surf, fonts, title, vals, unit,
+                    (rx, ry, CHART_W - 4, CHART_H),
+                    col, lo, hi, warn, crit)
+
+    pygame.display.flip()
+
+
+# ── Entry point ────────────────────────────────────────────────────────────
+
+def main():
+    threads = [
+        threading.Thread(target=_thread_bme680,   daemon=True, name="bme680"),
+        threading.Thread(target=_thread_pm25,      daemon=True, name="pm25"),
+        threading.Thread(target=_thread_scd4x,     daemon=True, name="scd4x"),
+        threading.Thread(target=_thread_mlx90393,  daemon=True, name="mlx90393"),
+        threading.Thread(target=_thread_mca,       daemon=True, name="mca"),
+    ]
+    for t in threads:
+        t.start()
+
+    pygame.init()
+    flags = pygame.FULLSCREEN if "--fullscreen" in sys.argv else 0
+    screen = pygame.display.set_mode((SCREEN_W, SCREEN_H), flags)
+    pygame.display.set_caption("Sensor Dashboard")
+    pygame.mouse.set_visible(False)
+    clock = pygame.time.Clock()
+
+    fonts = {
+        "lg": pygame.font.SysFont("dejavusansmono", 26, bold=True),
+        "md": pygame.font.SysFont("dejavusansmono", 18, bold=True),
+        "sm": pygame.font.SysFont("dejavusansmono", 14),
+        "xs": pygame.font.SysFont("dejavusansmono", 11),
+    }
+
+    while True:
+        for ev in pygame.event.get():
+            if ev.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit(0)
+            if ev.type == pygame.KEYDOWN and ev.key in (pygame.K_q, pygame.K_ESCAPE):
+                pygame.quit()
+                sys.exit(0)
+
+        with _lock:
+            d    = {k: dict(v)      for k, v in _data.items()}
+            hist = {k: list(v)      for k, v in _hist.items()}
+
+        _render(screen, fonts, d, hist)
+        clock.tick(FPS)
+
+
+if __name__ == "__main__":
+    main()
