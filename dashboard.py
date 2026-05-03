@@ -35,10 +35,10 @@ except ImportError:
     _PM25 = False
 
 try:
-    import adafruit_scd4x
-    _SCD4X = True
+    import adafruit_scd30
+    _SCD30 = True
 except ImportError:
-    _SCD4X = False
+    _SCD30 = False
 
 try:
     import adafruit_mlx90393
@@ -155,28 +155,27 @@ def _thread_pm25():
 
 
 def _thread_scd4x():
-    if not _SCD4X:
+    if not _SCD30:
         with _lock:
-            _data["co2"]["err"] = "adafruit_scd4x not installed"
+            _data["co2"]["err"] = "adafruit_scd30 not installed"
         return
     try:
         i2c = board.I2C()
-        scd = adafruit_scd4x.SCD4X(i2c)
-        scd.start_periodic_measurement()
+        scd = adafruit_scd30.SCD30(i2c)
         while True:
             try:
-                if scd.data_ready:
+                if scd.data_available:
                     co2 = scd.CO2
                     t   = round(scd.temperature, 1)
                     h   = round(scd.relative_humidity, 1)
                     with _lock:
-                        _data["co2"].update(co2=co2, temperature=t,
+                        _data["co2"].update(co2=int(co2), temperature=t,
                                             humidity=h, ok=True, err="")
-                        _hist["co2"].append(co2)
+                        _hist["co2"].append(int(co2))
             except Exception as e:
                 with _lock:
                     _data["co2"].update(ok=False, err=str(e)[:40])
-            time.sleep(5)
+            time.sleep(2)
     except Exception as e:
         with _lock:
             _data["co2"].update(ok=False, err=f"init: {e}"[:40])
