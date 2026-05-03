@@ -54,8 +54,8 @@ except ImportError:
 
 # ── Configuration ──────────────────────────────────────────────────────────
 
-SCREEN_W   = 1280
-SCREEN_H   = 720
+SCREEN_W   = 0   # set at runtime from actual display
+SCREEN_H   = 0
 FPS        = 10
 HISTORY    = 120        # data points kept per channel (≈ 120 s at 1 Hz)
 PM_PORT    = "/dev/ttyS0"
@@ -400,21 +400,23 @@ def _render(surf, fonts, d, hist, scanlines):
           AMBER_DIM, SCREEN_W - 90, 12)
 
     # ── Arc gauges ─────────────────────────────────────────────────────────
-    GY = 158
-    GR = 106
-    for gx in [320, 640, 960]:
+    GR = int(SCREEN_H * 0.147)          # gauge radius scales with screen
+    GY = 38 + GR + 12                   # centre y
+    for gx in [SCREEN_W//4, SCREEN_W//2, SCREEN_W*3//4]:
         _vline(surf, gx, 40, 274)
 
-    _draw_gauge(surf, fonts, 160,  GY, GR,
-                bme["temperature"], 0, 50,   "TEMPERATURE", "°C",   30,   40)
-    _draw_gauge(surf, fonts, 480,  GY, GR,
-                co2["co2"],        350, 2500, "CO2",        "ppm", 1000, 2000)
-    _draw_gauge(surf, fonts, 800,  GY, GR,
-                pm["pm25"],          0,   60, "PM  2.5",   "µg/m³", 12,  35)
-    _draw_gauge(surf, fonts, 1120, GY, GR,
-                mca["cps"],          0,  200, "RADIATION",  "cps",  100, 500)
+    QW = SCREEN_W // 4
+    _draw_gauge(surf, fonts, QW//2,       GY, GR,
+                bme["temperature"], 0, 50,    "TEMPERATURE", "°C",   30,   40)
+    _draw_gauge(surf, fonts, QW + QW//2,  GY, GR,
+                co2["co2"],        350, 2500,  "CO2",        "ppm", 1000, 2000)
+    _draw_gauge(surf, fonts, QW*2 + QW//2, GY, GR,
+                pm["pm25"],          0,   60,  "PM  2.5",  "µg/m³",  12,   35)
+    _draw_gauge(surf, fonts, QW*3 + QW//2, GY, GR,
+                mca["cps"],          0,  200,  "RADIATION",  "cps", 100,  500)
 
-    _hline(surf, 274)
+    STRIP_TOP = GY + GR + 14
+    _hline(surf, STRIP_TOP)
 
     # ── Secondary info strips ──────────────────────────────────────────────
     def _v(val, fmt):
@@ -440,17 +442,19 @@ def _render(surf, fonts, d, hist, scanlines):
         ("COUNTS",   _v(mca["total"],       "{}"),         AMBER_DIM),
     ]
 
+    SH = int(SCREEN_H * 0.105)          # strip height
     sw = SCREEN_W // 3
-    _draw_info_strip(surf, fonts, strip1, (0,    277, sw, 76))
-    _draw_info_strip(surf, fonts, strip2, (sw,   277, sw, 76))
-    _draw_info_strip(surf, fonts, strip3, (sw*2, 277, sw, 76))
+    _draw_info_strip(surf, fonts, strip1, (0,    STRIP_TOP + 1, sw, SH))
+    _draw_info_strip(surf, fonts, strip2, (sw,   STRIP_TOP + 1, sw, SH))
+    _draw_info_strip(surf, fonts, strip3, (sw*2, STRIP_TOP + 1, sw, SH))
 
-    _hline(surf, 356)
+    CT = STRIP_TOP + SH + 4
+    _hline(surf, CT)
 
     # ── Charts ─────────────────────────────────────────────────────────────
-    CT = 360
-    CH = (SCREEN_H - CT - 6) // 2
-    CW = SCREEN_W // 3
+    CT += 2
+    CH  = (SCREEN_H - CT - 4) // 2
+    CW  = SCREEN_W // 3
 
     charts = [
         ("TEMPERATURE  (°C)",    hist["bme_temp"],  "°C",   0,    50,   30,   40),
@@ -687,18 +691,31 @@ def main():
         t.start()
 
     pygame.init()
-    flags  = pygame.FULLSCREEN if "--fullscreen" in sys.argv else 0
+
+    # Auto-detect screen size — fullscreen by default on Pi, windowed on laptop
+    info = pygame.display.Info()
+    global SCREEN_W, SCREEN_H
+    if "--windowed" in sys.argv:
+        SCREEN_W, SCREEN_H = 1280, 720
+        flags = 0
+    else:
+        SCREEN_W = info.current_w
+        SCREEN_H = info.current_h
+        flags    = pygame.FULLSCREEN
+
     screen = pygame.display.set_mode((SCREEN_W, SCREEN_H), flags)
     pygame.display.set_caption("Sensor Dashboard")
     pygame.mouse.set_visible(False)
     clock  = pygame.time.Clock()
 
+    # Scale fonts relative to screen height (designed for 720p)
+    sc = SCREEN_H / 720
     fonts = {
-        "xl": pygame.font.SysFont("dejavusansmono", 36, bold=True),  # gauge value
-        "lg": pygame.font.SysFont("dejavusansmono", 22, bold=True),  # title
-        "md": pygame.font.SysFont("dejavusansmono", 16, bold=True),  # secondary
-        "sm": pygame.font.SysFont("dejavusansmono", 13),
-        "xs": pygame.font.SysFont("dejavusansmono", 10),
+        "xl": pygame.font.SysFont("dejavusansmono", int(36 * sc), bold=True),
+        "lg": pygame.font.SysFont("dejavusansmono", int(22 * sc), bold=True),
+        "md": pygame.font.SysFont("dejavusansmono", int(16 * sc), bold=True),
+        "sm": pygame.font.SysFont("dejavusansmono", int(13 * sc)),
+        "xs": pygame.font.SysFont("dejavusansmono", int(10 * sc)),
     }
 
     scanlines = _make_scanlines(SCREEN_W, SCREEN_H)
