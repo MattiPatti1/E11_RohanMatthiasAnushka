@@ -710,12 +710,17 @@ def main():
 
     # Scale fonts relative to screen height (designed for 720p)
     sc = SCREEN_H / 720
+    def _fs(base, minimum=11):
+        return max(int(base * sc), minimum)
+
+    mono = "dejavusansmono"
+    sans = "dejavusans"
     fonts = {
-        "xl": pygame.font.SysFont("dejavusansmono", int(36 * sc), bold=True),
-        "lg": pygame.font.SysFont("dejavusansmono", int(22 * sc), bold=True),
-        "md": pygame.font.SysFont("dejavusansmono", int(16 * sc), bold=True),
-        "sm": pygame.font.SysFont("dejavusansmono", int(13 * sc)),
-        "xs": pygame.font.SysFont("dejavusansmono", int(10 * sc)),
+        "xl": pygame.font.SysFont(mono, _fs(36, 24), bold=True),  # gauge value
+        "lg": pygame.font.SysFont(sans, _fs(22, 16), bold=True),  # title
+        "md": pygame.font.SysFont(sans, _fs(17, 13), bold=True),  # secondary values
+        "sm": pygame.font.SysFont(sans, _fs(14, 12)),             # chart labels
+        "xs": pygame.font.SysFont(sans, _fs(12, 11)),             # small labels
     }
 
     scanlines = _make_scanlines(SCREEN_W, SCREEN_H)
