@@ -87,8 +87,8 @@ _data = {
 }
 
 _hist = {
-    "bme_temp":  collections.deque(maxlen=HISTORY),
-    "bme_humid": collections.deque(maxlen=HISTORY),
+    "co2_temp":  collections.deque(maxlen=HISTORY),
+    "co2_humid": collections.deque(maxlen=HISTORY),
     "co2":       collections.deque(maxlen=HISTORY),
     "pm25":      collections.deque(maxlen=HISTORY),
     "mag":       collections.deque(maxlen=HISTORY),
@@ -172,6 +172,8 @@ def _thread_scd4x():
                         _data["co2"].update(co2=int(co2), temperature=t,
                                             humidity=h, ok=True, err="")
                         _hist["co2"].append(int(co2))
+                        _hist["co2_temp"].append(t)
+                        _hist["co2_humid"].append(h)
             except Exception as e:
                 with _lock:
                     _data["co2"].update(ok=False, err=str(e)[:40])
@@ -381,7 +383,7 @@ def _draw_chart(surf, fonts, title, values, unit, rect,
 
 # ── Main render pass ───────────────────────────────────────────────────────
 
-def _render(surf, fonts, d, hist, scanlines, scd_env=False):
+def _render(surf, fonts, d, hist, scanlines):
     surf.fill(BG)
 
     bme = d["bme"]
@@ -390,10 +392,9 @@ def _render(surf, fonts, d, hist, scanlines, scd_env=False):
     mag = d["mag"]
     mca = d["mca"]
 
-    # Pick temp/humidity source based on mode
-    env_temp = co2["temperature"] if scd_env else bme["temperature"]
-    env_hum  = co2["humidity"]    if scd_env else bme["humidity"]
-    env_src  = "SCD30" if scd_env else "BME680"
+    # SCD30 is the source for temperature and humidity
+    env_temp = co2["temperature"]
+    env_hum  = co2["humidity"]
 
     # ── Title bar ──────────────────────────────────────────────────────────
     pygame.draw.rect(surf, PANEL, (0, 0, SCREEN_W, 36))
@@ -427,22 +428,12 @@ def _render(surf, fonts, d, hist, scanlines, scd_env=False):
     def _v(val, fmt):
         return fmt.format(val) if val is not None else "---"
 
-    if scd_env:
-        # SCD30 handles temp+humidity — show BME680 as pressure/gas/altitude only
-        strip1 = [
-            ("HUMIDITY",  _v(env_hum,       "{:.1f} %"),    AMBER),
-            ("PRESSURE",  _v(bme["pressure"],"{:.1f} hPa"),  AMBER),
-            ("ALTITUDE",  _v(bme["altitude"],"{:.0f} m"),    AMBER_DIM),
-            ("GAS RES",   _v(bme["gas"],     "{} Ω"),        AMBER_DIM),
-        ]
-    else:
-        strip1 = [
-            ("HUMIDITY",  _v(env_hum,        "{:.1f} %"),   AMBER),
-            ("PRESSURE",  _v(bme["pressure"], "{:.1f} hPa"), AMBER),
-            ("ALTITUDE",  _v(bme["altitude"], "{:.0f} m"),   AMBER_DIM),
-            ("GAS RES",   _v(bme["gas"],      "{} Ω"),       AMBER_DIM),
-        ]
-
+    strip1 = [
+        ("HUMIDITY",  _v(env_hum,          "{:.1f} %"),   AMBER),
+        ("PRESSURE",  _v(bme["pressure"],  "{:.1f} hPa"), AMBER),
+        ("ALTITUDE",  _v(bme["altitude"],  "{:.0f} m"),   AMBER_DIM),
+        ("GAS RES",   _v(bme["gas"],       "{} Ω"),       AMBER_DIM),
+    ]
     strip2 = [
         ("PM 1.0",  _v(pm["pm1"],  "{} µg"),  _tcolor(pm["pm1"],   12,  35)),
         ("PM 10",   _v(pm["pm10"], "{} µg"),  _tcolor(pm["pm10"],  54, 154)),
@@ -451,10 +442,8 @@ def _render(surf, fonts, d, hist, scanlines, scd_env=False):
         ("MAG  Z",  _v(mag["z"],   "{} µT"),  AMBER),
     ]
     strip3 = [
-        (f"{env_src} TEMP", _v(env_temp,        "{:.1f} °C"), AMBER),
-        (f"{env_src} HUM",  _v(env_hum,         "{:.1f} %"),  AMBER),
-        ("µSV / HR",        _v(mca["usv_hr"],   "{:.4f}"),    _tcolor(mca["usv_hr"], 0.5, 1.0)),
-        ("COUNTS",          _v(mca["total"],    "{}"),         AMBER_DIM),
+        ("µSV / HR", _v(mca["usv_hr"], "{:.4f}"), _tcolor(mca["usv_hr"], 0.5, 1.0)),
+        ("COUNTS",   _v(mca["total"],  "{}"),      AMBER_DIM),
     ]
 
     SH = int(SCREEN_H * 0.105)          # strip height
@@ -472,9 +461,9 @@ def _render(surf, fonts, d, hist, scanlines, scd_env=False):
     CW  = SCREEN_W // 3
 
     charts = [
-        ("TEMPERATURE  (°C)",    hist["bme_temp"],  "°C",   0,    50,   30,   40),
+        ("TEMPERATURE  (°C)",    hist["co2_temp"],  "°C",   0,    50,   30,   40),
         ("CO2  (ppm)",           hist["co2"],       "ppm",  300, 2500, 1000, 2000),
-        ("HUMIDITY  (%)",        hist["bme_humid"], "%",    0,   100,   70,   85),
+        ("HUMIDITY  (%)",        hist["co2_humid"], "%",    0,   100,   70,   85),
         ("PM 2.5  (µg/m³)",      hist["pm25"],      "µg",   0,    60,   12,   35),
         ("MAGNETIC FIELD  |B|",  hist["mag"],       "µT",   None, None, None, None),
         ("RADIATION  (cps)",     hist["mca_cps"],   "cps",  0,   200,  100,  500),
@@ -627,6 +616,8 @@ def _demo_scd4x():
             _data["co2"].update(co2=int(co2), temperature=round(t, 1),
                                 humidity=round(h, 1), ok=True, err="")
             _hist["co2"].append(int(co2))
+            _hist["co2_temp"].append(round(t, 1))
+            _hist["co2_humid"].append(round(h, 1))
         time.sleep(2)
 
 
@@ -681,8 +672,7 @@ def _demo_mca():
 # ── Entry point ────────────────────────────────────────────────────────────
 
 def main():
-    demo    = "--demo"    in sys.argv
-    scd_env = "--scd-env" in sys.argv
+    demo = "--demo" in sys.argv
 
     if demo:
         _preload_demo_data()
@@ -754,7 +744,7 @@ def main():
             d    = {k: dict(v) for k, v in _data.items()}
             hist = {k: list(v) for k, v in _hist.items()}
 
-        _render(screen, fonts, d, hist, scanlines, scd_env)
+        _render(screen, fonts, d, hist, scanlines)
         clock.tick(FPS)
 
 
