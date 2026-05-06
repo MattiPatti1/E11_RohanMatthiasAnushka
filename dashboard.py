@@ -390,20 +390,35 @@ def _draw_mag_sphere(surf, fonts, cx, cy, r, mx, my, mz, rect):
     # Outer circle (equator silhouette)
     pygame.draw.circle(surf, BORDER, (cx, cy), r, 1)
 
-    # Field vector arrow
+    # Field vector arrow with proper arrowhead
     if mx is not None:
-        mag = math.sqrt(mx*mx + my*my + mz*mz) or 1.0
-        nx, ny, nz = mx/mag, my/mag, mz/mag
-        tip  = project(nx, ny, nz)
-        tail = project(-nx*0.3, -ny*0.3, -nz*0.3)
+        mag_ut = math.sqrt(mx*mx + my*my + mz*mz) or 1.0
+        nx, ny, nz = mx/mag_ut, my/mag_ut, mz/mag_ut
+        tip  = project(nx,       ny,       nz)
+        tail = project(-nx*0.5, -ny*0.5, -nz*0.5)
         col  = AMBER_HI
-        pygame.draw.line(surf, col, tail, tip, 3)
-        pygame.draw.circle(surf, col, tip, 5)
-        pygame.draw.circle(surf, AMBER_DIM, tail, 3)
+
+        # Thick shaft
+        pygame.draw.line(surf, col, tail, tip, 5)
+
+        # Arrowhead — triangle at tip
+        tx, ty = tip
+        # perpendicular direction in screen space
+        dx, dy = tx - tail[0], ty - tail[1]
+        length = math.sqrt(dx*dx + dy*dy) or 1
+        pdx, pdy = -dy/length, dx/length   # perpendicular unit vector
+        head_size = max(r // 5, 8)
+        base_x = tx - dx/length * head_size
+        base_y = ty - dy/length * head_size
+        p1 = (int(base_x + pdx * head_size * 0.5), int(base_y + pdy * head_size * 0.5))
+        p2 = (int(base_x - pdx * head_size * 0.5), int(base_y - pdy * head_size * 0.5))
+        pygame.draw.polygon(surf, col, [tip, p1, p2])
+
+        # Tail dot
+        pygame.draw.circle(surf, AMBER_DIM, tail, 4)
 
         # |B| magnitude label
-        mag_ut = math.sqrt(mx*mx + my*my + mz*mz)
-        _text_c(surf, fonts["sm"], f"|B| {mag_ut:.1f} µT", AMBER, cx, y + h - 14)
+        _text_c(surf, fonts["sm"], f"|B|  {mag_ut:.1f} µT", AMBER, cx, y + h - 14)
     else:
         _text_c(surf, fonts["md"], "---", AMBER_DIM, cx, cy)
 
