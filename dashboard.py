@@ -337,6 +337,79 @@ def _draw_info_strip(surf, fonts, fields, rect):
         _text_c(surf, fonts["md"], val,   color,     cx, y + 38)
 
 
+# ── 3-D magnetic field sphere ─────────────────────────────────────────────
+
+def _draw_mag_sphere(surf, fonts, cx, cy, r, mx, my, mz, rect):
+    """Draw a 3-D globe with a field-vector arrow and latitude/longitude rings."""
+    x, y, w, h = rect
+    pygame.draw.rect(surf, PANEL, rect)
+    pygame.draw.rect(surf, BORDER, rect, 1)
+
+    _text_c(surf, fonts["xs"], "MAGNETIC FIELD", AMBER_DIM, cx, y + 10)
+
+    # Isometric projection angles
+    ISO_X =  0.6   # tilt forward
+    ISO_Z = -0.8   # rotate left
+
+    def project(vx, vy, vz):
+        """Simple isometric-style 3-D → 2-D."""
+        # rotate around Z
+        rx = vx * math.cos(ISO_Z) - vy * math.sin(ISO_Z)
+        ry = vx * math.sin(ISO_Z) + vy * math.cos(ISO_Z)
+        rz = vz
+        # tilt around X
+        px = rx
+        py = ry * math.cos(ISO_X) - rz * math.sin(ISO_X)
+        return int(cx + px * r), int(cy + py * r)
+
+    # Latitude rings (horizontal circles)
+    for lat in range(-60, 90, 30):
+        rad_lat = math.radians(lat)
+        ring_r  = math.cos(rad_lat)
+        ring_z  = math.sin(rad_lat)
+        pts = []
+        for deg in range(0, 361, 6):
+            a  = math.radians(deg)
+            vx = ring_r * math.cos(a)
+            vy = ring_r * math.sin(a)
+            pts.append(project(vx, vy, ring_z))
+        if len(pts) > 1:
+            pygame.draw.lines(surf, AMBER_DIM, False, pts, 1)
+
+    # Longitude lines (vertical half-circles)
+    for lon in range(0, 180, 30):
+        rad_lon = math.radians(lon)
+        pts = []
+        for deg in range(0, 361, 6):
+            a  = math.radians(deg)
+            vx = math.cos(a) * math.cos(rad_lon)
+            vy = math.cos(a) * math.sin(rad_lon)
+            vz = math.sin(a)
+            pts.append(project(vx, vy, vz))
+        if len(pts) > 1:
+            pygame.draw.lines(surf, AMBER_DIM, False, pts, 1)
+
+    # Outer circle (equator silhouette)
+    pygame.draw.circle(surf, BORDER, (cx, cy), r, 1)
+
+    # Field vector arrow
+    if mx is not None:
+        mag = math.sqrt(mx*mx + my*my + mz*mz) or 1.0
+        nx, ny, nz = mx/mag, my/mag, mz/mag
+        tip  = project(nx, ny, nz)
+        tail = project(-nx*0.3, -ny*0.3, -nz*0.3)
+        col  = AMBER_HI
+        pygame.draw.line(surf, col, tail, tip, 3)
+        pygame.draw.circle(surf, col, tip, 5)
+        pygame.draw.circle(surf, AMBER_DIM, tail, 3)
+
+        # |B| magnitude label
+        mag_ut = math.sqrt(mx*mx + my*my + mz*mz)
+        _text_c(surf, fonts["sm"], f"|B| {mag_ut:.1f} µT", AMBER, cx, y + h - 14)
+    else:
+        _text_c(surf, fonts["md"], "---", AMBER_DIM, cx, cy)
+
+
 # ── Retro chart with grid ──────────────────────────────────────────────────
 
 def _draw_chart(surf, fonts, title, values, unit, rect,
@@ -435,22 +508,25 @@ def _render(surf, fonts, d, hist, scanlines):
         ("GAS RES",   _v(bme["gas"],       "{} Ω"),       AMBER_DIM),
     ]
     strip2 = [
-        ("PM 1.0",  _v(pm["pm1"],  "{} µg"),  _tcolor(pm["pm1"],   12,  35)),
-        ("PM 10",   _v(pm["pm10"], "{} µg"),  _tcolor(pm["pm10"],  54, 154)),
-        ("MAG  X",  _v(mag["x"],   "{} µT"),  AMBER),
-        ("MAG  Y",  _v(mag["y"],   "{} µT"),  AMBER),
-        ("MAG  Z",  _v(mag["z"],   "{} µT"),  AMBER),
-    ]
-    strip3 = [
-        ("µSV / HR", _v(mca["usv_hr"], "{:.4f}"), _tcolor(mca["usv_hr"], 0.5, 1.0)),
-        ("COUNTS",   _v(mca["total"],  "{}"),      AMBER_DIM),
+        ("PM 1.0",   _v(pm["pm1"],      "{} µg"),   _tcolor(pm["pm1"],  12, 35)),
+        ("PM 10",    _v(pm["pm10"],     "{} µg"),   _tcolor(pm["pm10"], 54, 154)),
+        ("µSV / HR", _v(mca["usv_hr"], "{:.4f}"),   _tcolor(mca["usv_hr"], 0.5, 1.0)),
+        ("COUNTS",   _v(mca["total"],  "{}"),        AMBER_DIM),
     ]
 
-    SH = int(SCREEN_H * 0.105)          # strip height
+    SH = int(SCREEN_H * 0.105)
     sw = SCREEN_W // 3
-    _draw_info_strip(surf, fonts, strip1, (0,    STRIP_TOP + 1, sw, SH))
-    _draw_info_strip(surf, fonts, strip2, (sw,   STRIP_TOP + 1, sw, SH))
-    _draw_info_strip(surf, fonts, strip3, (sw*2, STRIP_TOP + 1, sw, SH))
+    _draw_info_strip(surf, fonts, strip1, (0,  STRIP_TOP + 1, sw, SH))
+    _draw_info_strip(surf, fonts, strip2, (sw, STRIP_TOP + 1, sw, SH))
+
+    # 3-D magnetic sphere occupies the third strip slot + bleeds into chart area
+    SPHERE_R = int(SH * 0.9)
+    SPHERE_X = sw * 2 + sw // 2
+    SPHERE_Y = STRIP_TOP + 1 + SH // 2
+    _draw_mag_sphere(surf, fonts,
+                     SPHERE_X, SPHERE_Y, SPHERE_R,
+                     mag["x"], mag["y"], mag["z"],
+                     (sw * 2, STRIP_TOP + 1, sw, SH))
 
     CT = STRIP_TOP + SH + 4
     _hline(surf, CT)
