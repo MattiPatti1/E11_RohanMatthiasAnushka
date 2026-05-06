@@ -476,55 +476,46 @@ def _render(surf, fonts, d, hist, scanlines):
     _text(surf, fonts["xs"], time.strftime("%H : %M : %S"),
           AMBER_DIM, SCREEN_W - 90, 12)
 
-    # ── Arc gauges ─────────────────────────────────────────────────────────
+    # ── Arc gauges + sphere ────────────────────────────────────────────────
     GR = int(SCREEN_H * 0.147)
     GY = 38 + GR + 12
-    for gx in [SCREEN_W//4, SCREEN_W//2, SCREEN_W*3//4]:
+    QW = SCREEN_W // 4
+    for gx in [QW, QW*2, QW*3]:
         _vline(surf, gx, 40, GY + GR + 8)
 
-    QW = SCREEN_W // 4
-    _draw_gauge(surf, fonts, QW//2,        GY, GR,
-                env_temp,   0, 50,    "TEMPERATURE", "°C",   30,   40)
-    _draw_gauge(surf, fonts, QW + QW//2,   GY, GR,
-                co2["co2"], 350, 2500, "CO2",        "ppm", 1000, 2000)
-    _draw_gauge(surf, fonts, QW*2 + QW//2, GY, GR,
-                pm["pm25"], 0,   60,   "PM  2.5",  "µg/m³",  12,   35)
+    # Gauge 1: Temperature
+    _draw_gauge(surf, fonts, QW//2,      GY, GR,
+                env_temp,   0, 50,   "TEMPERATURE", "°C",  30,   40)
+    # Gauge 2: CO2
+    _draw_gauge(surf, fonts, QW + QW//2, GY, GR,
+                co2["co2"], 350, 2500, "CO2",       "ppm", 1000, 2000)
+    # Gauge 3 slot: 3D magnetic sphere
+    _draw_mag_sphere(surf, fonts,
+                     QW*2 + QW//2, GY, GR,
+                     mag["x"], mag["y"], mag["z"],
+                     (QW*2, 38, QW, GR*2 + 4))
+    # Gauge 4: Radiation
     _draw_gauge(surf, fonts, QW*3 + QW//2, GY, GR,
-                mca["cps"], 0,  200,   "RADIATION",  "cps", 100,  500)
+                mca["cps"], 0, 200, "RADIATION", "cps", 100, 500)
 
     STRIP_TOP = GY + GR + 14
     _hline(surf, STRIP_TOP)
 
-    # ── Secondary info strips ──────────────────────────────────────────────
+    # ── Secondary info strip ───────────────────────────────────────────────
     def _v(val, fmt):
         return fmt.format(val) if val is not None else "---"
 
-    strip1 = [
-        ("HUMIDITY",  _v(env_hum,          "{:.1f} %"),   AMBER),
-        ("PRESSURE",  _v(bme["pressure"],  "{:.1f} hPa"), AMBER),
-        ("ALTITUDE",  _v(bme["altitude"],  "{:.0f} m"),   AMBER_DIM),
-        ("GAS RES",   _v(bme["gas"],       "{} Ω"),       AMBER_DIM),
-    ]
-    strip2 = [
-        ("PM 1.0",   _v(pm["pm1"],      "{} µg"),   _tcolor(pm["pm1"],  12, 35)),
-        ("PM 10",    _v(pm["pm10"],     "{} µg"),   _tcolor(pm["pm10"], 54, 154)),
-        ("µSV / HR", _v(mca["usv_hr"], "{:.4f}"),   _tcolor(mca["usv_hr"], 0.5, 1.0)),
-        ("COUNTS",   _v(mca["total"],  "{}"),        AMBER_DIM),
+    strip = [
+        ("HUMIDITY",  _v(env_hum,       "{:.1f} %"),  AMBER),
+        ("PM 1.0",    _v(pm["pm1"],     "{} µg"),     _tcolor(pm["pm1"],  12,  35)),
+        ("PM 2.5",    _v(pm["pm25"],    "{} µg"),     _tcolor(pm["pm25"], 12,  35)),
+        ("PM 10",     _v(pm["pm10"],    "{} µg"),     _tcolor(pm["pm10"], 54, 154)),
+        ("µSV / HR",  _v(mca["usv_hr"],"{:.4f}"),     _tcolor(mca["usv_hr"], 0.5, 1.0)),
+        ("COUNTS",    _v(mca["total"], "{}"),          AMBER_DIM),
     ]
 
     SH = int(SCREEN_H * 0.105)
-    sw = SCREEN_W // 3
-    _draw_info_strip(surf, fonts, strip1, (0,  STRIP_TOP + 1, sw, SH))
-    _draw_info_strip(surf, fonts, strip2, (sw, STRIP_TOP + 1, sw, SH))
-
-    # 3-D magnetic sphere occupies the third strip slot + bleeds into chart area
-    SPHERE_R = int(SH * 0.9)
-    SPHERE_X = sw * 2 + sw // 2
-    SPHERE_Y = STRIP_TOP + 1 + SH // 2
-    _draw_mag_sphere(surf, fonts,
-                     SPHERE_X, SPHERE_Y, SPHERE_R,
-                     mag["x"], mag["y"], mag["z"],
-                     (sw * 2, STRIP_TOP + 1, sw, SH))
+    _draw_info_strip(surf, fonts, strip, (0, STRIP_TOP + 1, SCREEN_W, SH))
 
     CT = STRIP_TOP + SH + 4
     _hline(surf, CT)
