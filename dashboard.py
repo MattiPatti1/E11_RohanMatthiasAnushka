@@ -83,7 +83,7 @@ _data = {
     "pm":  dict(pm1=None, pm25=None, pm10=None, ok=False, err=""),
     "co2": dict(co2=None, temperature=None, humidity=None, ok=False, err=""),
     "mag": dict(x=None, y=None, z=None, magnitude=None, ok=False, err=""),
-    "mca": dict(cps=None, temperature=None, total=None, usv_hr=None, ok=False, err=""),
+    "mca": dict(cps=None, temperature=None, total=None, usv_hr=None, peak_cps=None, ok=False, err=""),
 }
 
 _hist = {
@@ -216,14 +216,15 @@ def _thread_mca():
         with _lock:
             _data["mca"].update(ok=False, err="no MCA device found")
         return
+    _peak = 0.0
     while True:
         try:
             with CapeMCA() as mca:
                 status = mca.read_status()
-                cps   = status.cps
-                total = status.total_count
+                cps    = round(status.cps, 1)
+                _peak  = max(_peak, cps)
                 with _lock:
-                    _data["mca"].update(cps=round(cps, 1), total=total,
+                    _data["mca"].update(cps=cps, peak_cps=_peak,
                                         ok=True, err="")
                     _hist["mca_cps"].append(cps)
         except Exception as e:
@@ -520,13 +521,28 @@ def _render(surf, fonts, d, hist, scanlines):
     def _v(val, fmt):
         return fmt.format(val) if val is not None else "---"
 
+    # Background = average of last 20 readings (needs enough data to be meaningful)
+    mca_hist = hist["mca_cps"]
+    if len(mca_hist) >= 10:
+        background = sum(mca_hist) / len(mca_hist)
+        if mca["cps"] is not None:
+            rel = mca["cps"] - background
+            rel_str  = f"{rel:+.1f} cps"
+            rel_col  = OLIVE if abs(rel) < 2 else (GOLD if abs(rel) < 10 else RED_HOT)
+        else:
+            rel_str, rel_col = "---", AMBER_DIM
+        bg_str = f"{background:.1f} cps"
+    else:
+        rel_str, rel_col = "wait...", AMBER_DIM
+        bg_str = "wait..."
+
     strip = [
-        ("HUMIDITY",  _v(env_hum,       "{:.1f} %"),  AMBER),
-        ("PM 1.0",    _v(pm["pm1"],     "{} µg"),     _tcolor(pm["pm1"],  12,  35)),
-        ("PM 2.5",    _v(pm["pm25"],    "{} µg"),     _tcolor(pm["pm25"], 12,  35)),
-        ("PM 10",     _v(pm["pm10"],    "{} µg"),     _tcolor(pm["pm10"], 54, 154)),
-        ("µSV / HR",  _v(mca["usv_hr"],"{:.4f}"),     _tcolor(mca["usv_hr"], 0.5, 1.0)),
-        ("COUNTS",    _v(mca["total"], "{}"),          AMBER_DIM),
+        ("HUMIDITY",   _v(env_hum,        "{:.1f} %"),  AMBER),
+        ("PM 1.0",     _v(pm["pm1"],      "{} µg"),     _tcolor(pm["pm1"],      12,  35)),
+        ("PM 2.5",     _v(pm["pm25"],     "{} µg"),     _tcolor(pm["pm25"],     12,  35)),
+        ("PM 10",      _v(pm["pm10"],     "{} µg"),     _tcolor(pm["pm10"],     54, 154)),
+        ("PEAK CPS",   _v(mca["peak_cps"],"{:.1f}"),    AMBER),
+        ("VS BG",      rel_str,                         rel_col),
     ]
 
     SH = int(SCREEN_H * 0.105)
