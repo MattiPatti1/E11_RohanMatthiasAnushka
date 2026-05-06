@@ -381,7 +381,7 @@ def _draw_chart(surf, fonts, title, values, unit, rect,
 
 # ── Main render pass ───────────────────────────────────────────────────────
 
-def _render(surf, fonts, d, hist, scanlines):
+def _render(surf, fonts, d, hist, scanlines, scd_env=False):
     surf.fill(BG)
 
     bme = d["bme"]
@@ -389,6 +389,11 @@ def _render(surf, fonts, d, hist, scanlines):
     pm  = d["pm"]
     mag = d["mag"]
     mca = d["mca"]
+
+    # Pick temp/humidity source based on mode
+    env_temp = co2["temperature"] if scd_env else bme["temperature"]
+    env_hum  = co2["humidity"]    if scd_env else bme["humidity"]
+    env_src  = "SCD30" if scd_env else "BME680"
 
     # ── Title bar ──────────────────────────────────────────────────────────
     pygame.draw.rect(surf, PANEL, (0, 0, SCREEN_W, 36))
@@ -400,20 +405,20 @@ def _render(surf, fonts, d, hist, scanlines):
           AMBER_DIM, SCREEN_W - 90, 12)
 
     # ── Arc gauges ─────────────────────────────────────────────────────────
-    GR = int(SCREEN_H * 0.147)          # gauge radius scales with screen
-    GY = 38 + GR + 12                   # centre y
+    GR = int(SCREEN_H * 0.147)
+    GY = 38 + GR + 12
     for gx in [SCREEN_W//4, SCREEN_W//2, SCREEN_W*3//4]:
-        _vline(surf, gx, 40, 274)
+        _vline(surf, gx, 40, GY + GR + 8)
 
     QW = SCREEN_W // 4
-    _draw_gauge(surf, fonts, QW//2,       GY, GR,
-                bme["temperature"], 0, 50,    "TEMPERATURE", "°C",   30,   40)
-    _draw_gauge(surf, fonts, QW + QW//2,  GY, GR,
-                co2["co2"],        350, 2500,  "CO2",        "ppm", 1000, 2000)
+    _draw_gauge(surf, fonts, QW//2,        GY, GR,
+                env_temp,   0, 50,    "TEMPERATURE", "°C",   30,   40)
+    _draw_gauge(surf, fonts, QW + QW//2,   GY, GR,
+                co2["co2"], 350, 2500, "CO2",        "ppm", 1000, 2000)
     _draw_gauge(surf, fonts, QW*2 + QW//2, GY, GR,
-                pm["pm25"],          0,   60,  "PM  2.5",  "µg/m³",  12,   35)
+                pm["pm25"], 0,   60,   "PM  2.5",  "µg/m³",  12,   35)
     _draw_gauge(surf, fonts, QW*3 + QW//2, GY, GR,
-                mca["cps"],          0,  200,  "RADIATION",  "cps", 100,  500)
+                mca["cps"], 0,  200,   "RADIATION",  "cps", 100,  500)
 
     STRIP_TOP = GY + GR + 14
     _hline(surf, STRIP_TOP)
@@ -422,12 +427,22 @@ def _render(surf, fonts, d, hist, scanlines):
     def _v(val, fmt):
         return fmt.format(val) if val is not None else "---"
 
-    strip1 = [
-        ("HUMIDITY",  _v(bme["humidity"],  "{:.1f} %"),   AMBER),
-        ("PRESSURE",  _v(bme["pressure"],  "{:.1f} hPa"), AMBER),
-        ("ALTITUDE",  _v(bme["altitude"],  "{:.0f} m"),   AMBER_DIM),
-        ("GAS RES",   _v(bme["gas"],       "{} Ω"),       AMBER_DIM),
-    ]
+    if scd_env:
+        # SCD30 handles temp+humidity — show BME680 as pressure/gas/altitude only
+        strip1 = [
+            ("HUMIDITY",  _v(env_hum,       "{:.1f} %"),    AMBER),
+            ("PRESSURE",  _v(bme["pressure"],"{:.1f} hPa"),  AMBER),
+            ("ALTITUDE",  _v(bme["altitude"],"{:.0f} m"),    AMBER_DIM),
+            ("GAS RES",   _v(bme["gas"],     "{} Ω"),        AMBER_DIM),
+        ]
+    else:
+        strip1 = [
+            ("HUMIDITY",  _v(env_hum,        "{:.1f} %"),   AMBER),
+            ("PRESSURE",  _v(bme["pressure"], "{:.1f} hPa"), AMBER),
+            ("ALTITUDE",  _v(bme["altitude"], "{:.0f} m"),   AMBER_DIM),
+            ("GAS RES",   _v(bme["gas"],      "{} Ω"),       AMBER_DIM),
+        ]
+
     strip2 = [
         ("PM 1.0",  _v(pm["pm1"],  "{} µg"),  _tcolor(pm["pm1"],   12,  35)),
         ("PM 10",   _v(pm["pm10"], "{} µg"),  _tcolor(pm["pm10"],  54, 154)),
@@ -436,10 +451,10 @@ def _render(surf, fonts, d, hist, scanlines):
         ("MAG  Z",  _v(mag["z"],   "{} µT"),  AMBER),
     ]
     strip3 = [
-        ("CO2 TEMP", _v(co2["temperature"], "{:.1f} °C"),  AMBER),
-        ("CO2 HUM",  _v(co2["humidity"],    "{:.1f} %"),   AMBER),
-        ("µSV / HR", _v(mca["usv_hr"],      "{:.4f}"),     _tcolor(mca["usv_hr"], 0.5, 1.0)),
-        ("COUNTS",   _v(mca["total"],       "{}"),         AMBER_DIM),
+        (f"{env_src} TEMP", _v(env_temp,        "{:.1f} °C"), AMBER),
+        (f"{env_src} HUM",  _v(env_hum,         "{:.1f} %"),  AMBER),
+        ("µSV / HR",        _v(mca["usv_hr"],   "{:.4f}"),    _tcolor(mca["usv_hr"], 0.5, 1.0)),
+        ("COUNTS",          _v(mca["total"],    "{}"),         AMBER_DIM),
     ]
 
     SH = int(SCREEN_H * 0.105)          # strip height
@@ -666,7 +681,8 @@ def _demo_mca():
 # ── Entry point ────────────────────────────────────────────────────────────
 
 def main():
-    demo = "--demo" in sys.argv
+    demo    = "--demo"    in sys.argv
+    scd_env = "--scd-env" in sys.argv
 
     if demo:
         _preload_demo_data()
@@ -738,7 +754,7 @@ def main():
             d    = {k: dict(v) for k, v in _data.items()}
             hist = {k: list(v) for k, v in _hist.items()}
 
-        _render(screen, fonts, d, hist, scanlines)
+        _render(screen, fonts, d, hist, scanlines, scd_env)
         clock.tick(FPS)
 
 
