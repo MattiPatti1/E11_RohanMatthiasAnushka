@@ -116,8 +116,6 @@ def _thread_bme680():
                 with _lock:
                     _data["bme"].update(temperature=t, humidity=h, pressure=p,
                                         gas=g, altitude=a, ok=True, err="")
-                    _hist["bme_temp"].append(t)
-                    _hist["bme_humid"].append(h)
             except Exception as e:
                 with _lock:
                     _data["bme"].update(ok=False, err=str(e)[:40])
@@ -618,8 +616,6 @@ def _demo_bme680():
                     _data["bme"].update(temperature=t, humidity=h,
                                         pressure=p, gas=g, altitude=a,
                                         ok=True, err="")
-                    _hist["bme_temp"].append(t)
-                    _hist["bme_humid"].append(h)
             except Exception as e:
                 with _lock:
                     _data["bme"].update(ok=False, err=str(e)[:40])
